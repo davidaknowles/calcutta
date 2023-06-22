@@ -11,6 +11,7 @@ SALMONDIR=salmon_spliceu
 POSSIBLE_BARCODES=~/calcutta/calcutta/splitseqv1_meta/splitseqv1_bc_all_combo.txt
 OUTDIR=${SALMONDIR}/quant_t2t
 INDEX=/gpfs/commons/home/daknowles/knowles_lab/index/salmon/mus_spliceu/
+
 USE_KNOW_BARCODES=true
 
 if [ "$USE_KNOW_BARCODES" = true ] ; then

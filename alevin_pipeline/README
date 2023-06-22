@@ -1,3 +1,11 @@
+## Isoform aware alevin fry pipeline
+
+1_index.sh builds an index that include both mature mRNA and a precursor "transcript" for each gene, which alevin calls a "spliceu" index (as opposed to a splici index which has introns represented separately). 
+2_align.sh (pseudo)aligns reads creating a "RAD" file.
+3_correct_and_align.sh tries to correct cell barcodes either to a white list (this doesn't work well for some reason) or de novo, and then performs quantification which gives isoform or gene level abundance, plus a equivalence class matrix that could be used for downstream analysis. 
+
+## Details
+
 Main issue was rad files are big. 
 Good news is the collated file is sorted by BC so can process with a lot less memory. 
 Even better news is alevin fry quant will make a sparse cells by EC matrix via the --dump-eqclasses option. 

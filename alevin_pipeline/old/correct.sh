@@ -17,7 +17,7 @@ while read SRR; do
 
     alevin-fry generate-permit-list -d both -i ${SALMONDIR} --output-dir $PERMITDIR -k
     alevin-fry collate -r ${SALMONDIR} -t 16 -i $PERMITDIR
-    # alevin-fry quant -m splici_index_reference/transcriptome_splici_fl61_t2g_3col.tsv -i ./SRR6750057_out_permit_knee -o ./SRR6750057_counts -t 16 -r cr-like-em --use-mtx. Don't have t2g mapping :(
+    alevin-fry quant -m splici_index_reference/transcriptome_splici_fl61_t2g_3col.tsv -i ./SRR6750057_out_permit_knee -o ./SRR6750057_counts -t 16 -r cr-like-em --use-mtx # Don't have t2g mapping :(
 
 done < SRR/SRR_Acc_List.txt
 
