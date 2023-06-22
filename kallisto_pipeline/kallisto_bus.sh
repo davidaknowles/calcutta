@@ -14,3 +14,13 @@ while read SRR; do
 done < SRR_Acc_List.txt
 
 popd
+
+else if (opt.technology == "SPLIT-SEQ") {
+        busopt.nfiles = 2;
+        busopt.seq.push_back(BUSOptionSubstr(0,0,0));
+        busopt.umi.push_back(BUSOptionSubstr(1,0,10));
+        busopt.bc.push_back(BUSOptionSubstr(1,10,18));
+        busopt.bc.push_back(BUSOptionSubstr(1,48,56));
+        busopt.bc.push_back(BUSOptionSubstr(1,78,86));
+        -s 87 -e 94
+        

@@ -7,12 +7,25 @@ cd /gpfs/commons/groups/knowles_lab/data/parse/original_SPLITseq_GSE110823
 
 pushd .
     
-SALMONDIR=salmon_GRCm38
-PERMITDIR=${SALMONDIR}/out_permit_knee
+SALMONDIR=salmon_spliceu
+POSSIBLE_BARCODES=~/calcutta/calcutta/splitseqv1_meta/splitseqv1_bc_all_combo.txt
+OUTDIR=${SALMONDIR}/quant_t2t
+INDEX=/gpfs/commons/home/daknowles/knowles_lab/index/salmon/mus_spliceu/
+USE_KNOW_BARCODES=true
 
-alevin-fry generate-permit-list -d both -i ${SALMONDIR} --output-dir $PERMITDIR -k
+if [ "$USE_KNOW_BARCODES" = true ] ; then
+    PERMITDIR=${SALMONDIR}/out_permit_known
+    alevin-fry generate-permit-list -d both -i ${SALMONDIR} --output-dir $PERMITDIR --unfiltered-pl $POSSIBLE_BARCODES --min-reads 100
+else
+    PERMITDIR=${SALMONDIR}/out_permit_knee
+    alevin-fry generate-permit-list -d both -i ${SALMONDIR} --output-dir $PERMITDIR -k  # without known list
+fi
+
 alevin-fry collate -r ${SALMONDIR} -t 16 -i $PERMITDIR
-# alevin-fry quant -m splici_index_reference/transcriptome_splici_fl61_t2g_3col.tsv -i ./SRR6750057_out_permit_knee -o ./SRR6750057_counts -t 16 -r cr-like-em --use-mtx. # Don't have t2g mapping :(
+
+# use spliceu_t2g.tsv instead of t2t.tsv for gene (rather than isoform) level quantification
+# OR spliceu_t2g_3col.tsv for USA mode
+alevin-fry quant -m ${INDEX}t2t.tsv -i $PERMITDIR -o $OUTDIR -t 16 -r cr-like-em --use-mtx --dump-eqclasses
 
 popd
 

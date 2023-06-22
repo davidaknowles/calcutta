@@ -11,6 +11,14 @@ import gzip
 
 from collections import OrderedDict, namedtuple
 
+REVERSER=str.maketrans("AGCT","TCGA")
+
+def sparse_sum(x, dim):
+    return np.squeeze(np.asarray(x.sum(dim)))
+
+def reverse_complement(seq):
+    return seq.translate(REVERSER)[::-1]
+
 def smart_open(filename, *argene_set, **kwargene_set):
     return gzip.open(filename, *argene_set, **kwargene_set) if filename.suffix==".gz" else open(filename, *argene_set, **kwargene_set)
 
@@ -29,6 +37,8 @@ def get_fasta(fasta_file, first_field = False):
             dic[x[0].strip()] = seq
 
     return dic
+
+
 
 def get_transcript_gene_map(transcript_fn, t2g_fn):
     transcripts = pd.read_csv(transcript_fn, sep = "\t", names = ["transcripts"]).transcripts
@@ -52,7 +62,7 @@ def read_ec(fn):
             l = line.split()
             ec = int(l[0])
             ec_map[ec] = [int(x) for x in l[1].split(',')]
-    return ec
+    return ec_map
 
 def transcript_to_ec(ec_map):
     ec_reverse = {}
@@ -70,6 +80,17 @@ def process_bus(
     update_umi_store_func,
     update_global_func
 ):
+    """
+    Processes a bus file and extracts info
+    
+    Parameters
+    ----------
+    bus_file: the filename of the bus file, converted to txt or txt.gz
+    global_store: the datastructure where info will be stored (and then returned)
+    setup_umi_store_func: function that returns an empty umi_store, datastructure that will store info about the current UMI. () -> umi_store
+    update_umi_store_func: function that will update the umi_store. umi_store, ec -> umi_store, where ec is the index. 
+    update_global_func: function that will update the global_store. (global_store,umi_store,current_BC) -> None
+    """
 
     previous_bc=None
     previous_umi=None
@@ -93,7 +114,7 @@ def process_bus(
             ec = int(ec)
 
             if barcode == previous_bc:
-                if umi != previous_umi:
+                if umi != previous_umi: # i.e. same cell but new UMI
                     update_global_func(global_store,umi_store,previous_bc) 
 
                     previous_umi = umi
@@ -164,10 +185,10 @@ def count_genes_per_umi(bus_file, ec_map, t2g_dic):
 
 def collapse_umis_per_cell(bus_file, ec_map, min_umi_per_cell = 0):
     
-    cell_ec = collections.defaultdict(lambda: collections.defaultdict(float)) # barcode -> EC -> UMI count
+    cell_ec = collections.defaultdict(lambda: collections.defaultdict(float)) # cell barcode -> EC -> UMI count
     
     def update_global_func(cell_ec,umi_store,bc): # need to define here because can't modify an argument in a lambda
-        ec = frozenset(umi_store)
+        ec = frozenset(umi_store) # would be more efficient to be building an EC lookup rather than storing the frozenset each time
         cell_ec[bc][ec] += 1
     
     process_bus(
@@ -182,6 +203,34 @@ def collapse_umis_per_cell(bus_file, ec_map, min_umi_per_cell = 0):
         cell_ec = {bc:g for bc,g in cell_ec.items() if sum(g.values())>=min_umi_per_cell}
     
     return cell_ec
+
+def collapse_umis_per_cell_lowmem(bus_file, ec_map, min_umi_per_cell = 0):
+    """Iteratively builds new EC map"""
+    GlobalStore = collections.namedtuple("GlobalStore", "cell_ec ec_map")
+    
+    global_store = GlobalStore( 
+        collections.defaultdict(lambda: collections.defaultdict(float)), # cell_ec: cell barcode -> EC -> UMI count
+        collections.OrderedDict()
+    )
+    
+    def update_global_func(global_store,umi_store,bc): # need to define here because can't modify an argument in a lambda
+        ec = frozenset(umi_store) # would be more efficient to be building an EC lookup rather than storing the frozenset each time
+        if not ec in global_store.ec_map: 
+            global_store.ec_map[ec] = len(global_store.ec_map)
+        global_store.cell_ec[bc][global_store.ec_map[ec]] += 1
+    
+    process_bus(
+        bus_file,
+        global_store = global_store,
+        setup_umi_store_func = lambda: None, # umi_store is a set of transcripts. Init to None so intersection_update will be valid. 
+        update_umi_store_func = lambda transcript_set,ec: set(ec_map[ec]) if (transcript_set is None) else transcript_set.intersection(ec_map[ec]), 
+        update_global_func = update_global_func,
+    )
+    
+    if min_umi_per_cell > 0: 
+        global_store.cell_ec = {bc:g for bc,g in global_store.cell_ec.items() if sum(g.values())>=min_umi_per_cell}
+    
+    return global_store.cell_ec, global_store.ec_map
 
 def cell_ec_to_sparse(cell_ec):
 
@@ -309,3 +358,70 @@ def read_rad(
             cell_ec[cb][new_ecs[ec]] += 1
 
     return new_ecs,cell_ec,list(t2idx.keys())
+
+def read_alevin_ec(fn):
+
+    ecs = collections.OrderedDict()
+
+    with smart_open(fn) as f: 
+        for i,l in enumerate(f):
+            if i==0: 
+                num_genes = int(l.decode().strip())
+                continue
+            if i==1: 
+                num_ec = int(l.decode().strip())
+                continue
+            l = l.decode().strip().split()
+            l = [int(g) for g in l]
+            ec_idx = l[-1]
+            gene_idx = l[:-1]
+            ecs[ec_idx] = gene_idx
+    return num_genes, num_ec, ecs
+
+
+def make_cell_halfcell_matrix(BCs, polydT_hex_pairs, dtype = np.float32):
+    cb_to_idx = {cb:i for i,cb in enumerate(BCs)}
+    polydT_to_hex = { p:h for p,h in zip(polydT_hex_pairs.polydT, polydT_hex_pairs.hex) }
+    nnz = len(BCs) # number of half cells. every halfcell should be included exactly once. 
+    indices = np.zeros((2,nnz), dtype=int) # cell then half-cell
+    new_BCs = []
+    missing_hex_bc = 0
+    cell_i = 0 
+    nz_idx = 0
+    for i,bc in enumerate(BCs): # iterate over half cells
+        rt_bc = bc[16:]
+        #rt_bc = bc[:8]
+        if not rt_bc in polydT_to_hex: continue # this was a hex primer
+
+        corresponding_hex_bc = bc[:16] + polydT_to_hex[rt_bc]
+        #corresponding_hex_bc =  polydT_to_hex[rt_bc] + bc[8:]
+
+        new_BCs.append(corresponding_hex_bc)
+
+        indices[0,nz_idx] = cell_i
+        indices[1,nz_idx] = i
+        nz_idx += 1
+
+        if corresponding_hex_bc in cb_to_idx: 
+            indices[0,nz_idx] = cell_i
+            indices[1,nz_idx] = cb_to_idx[corresponding_hex_bc] 
+            nz_idx += 1
+        else: 
+            missing_hex_bc += 1
+        cell_i += 1
+
+    cell_to_half_map = sp.coo_matrix((np.ones(nz_idx, dtype = dtype), indices[:,:nz_idx]))
+
+    unused_hex = np.where(sparse_sum(cell_to_half_map,0)==0)[0]
+    for i in unused_hex:
+        new_BCs.append(BCs[i])
+        indices[0,nz_idx] = cell_i
+        indices[1,nz_idx] = i
+        nz_idx += 1
+        cell_i += 1
+    #assert(nz_idx == nnz)
+    cell_to_half_map = sp.coo_matrix((np.ones(nnz, dtype = dtype), indices))
+    print("Note:",np.sum(sparse_sum(cell_to_half_map,1)==1),"half cells have no pair")
+    # 32k cells lack their pair? Much worse (~140k) with first BC
+    
+    return np.array(new_BCs), cell_to_half_map
