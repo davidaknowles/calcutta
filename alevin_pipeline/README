@@ -1,3 +1,14 @@
+## Installing stuff
+
+`pyroe` makes an index that includes introns (splici) or precursors (spliceu). 
+libs are too old on the cluster to use conda install
+pip install fails under python 3.11 because numba requires <3.11, but seems to work with python 3.10
+docs: https://pyroe.readthedocs.io/en/latest/building_splici_index.html
+
+`alevin fry` can be installed using conda. 
+
+I compiled `salmon 1.10.0` from source into `/gpfs/commons/home/daknowles/knowles_lab/software/bin/`
+
 ## Isoform aware alevin fry pipeline
 
 1_index.sh builds an index that include both mature mRNA and a precursor "transcript" for each gene, which alevin calls a "spliceu" index (as opposed to a splici index which has introns represented separately). 
@@ -15,12 +26,6 @@ Even better news is alevin fry quant will make a sparse cells by EC matrix via t
 Initially used "mm10_cdna" index from
 http://refgenomes.databio.org/v3/genomes/splash/fa159612d40b1bedea9a279eb24999b3d27145f9dd70dcca
 This doesn't include precursor mRNA. 
-
-## pyroe
-makes an index that includes introns (splici) or precursors (spliceu). 
-libs are too old on the cluster to use conda install
-pip install fails under python 3.11 because numba requires <3.11, but seems to work with python 3.10
-docs: https://pyroe.readthedocs.io/en/latest/building_splici_index.html
 
 ## Notes on USA mode
 
