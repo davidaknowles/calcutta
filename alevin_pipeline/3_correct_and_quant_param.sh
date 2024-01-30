@@ -5,7 +5,7 @@
 #SBATCH --mem=64G
 #SBATCH --time=4-00:00:00
 
-SALMONDIR=salmon_spliceu
+SALMONDIR=salmon_per_sublib/$1
 
 POSSIBLE_BARCODES_V1=~/calcutta/calcutta/splitseqv1_meta/splitseqv1_bc_all_combo.txt
 POSSIBLE_BARCODES_V2=/gpfs/commons/groups/knowles_lab/data/sc/splitpool/Parse_meta/Parse_expanded_barcodes.txt

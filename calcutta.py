@@ -258,19 +258,20 @@ def cell_ec_to_sparse(cell_ec):
 
     return sorted_ecs, ec_id_map, sorted_BCs, indices, umi_counts
 
-def ecs_to_sparse(ecs):
-    """ecs should be a list of sets"""
-    nnz=sum( len(g) for g in ecs )
+def to_coo(x, shape = None):
+    """x is a list, where each item corresponds to a different row. The item for a row gives the column IDs for the non-zero entries. """
+    nnz = sum([len(g) for g in x])
 
     indices = np.zeros((2,nnz), dtype=int) # cell then EC idx
+
     nz_idx = 0
-    for ec_idx,ec in enumerate(ecs): 
-        nhere = len(ec)
-        indices[0,nz_idx:nz_idx+nhere] = ec_idx
-        indices[1,nz_idx:nz_idx+nhere] = list(ec)
+    for row_idx,col_ids in enumerate(x): 
+        nhere = len(col_ids)
+        indices[0,nz_idx:nz_idx+nhere] = row_idx
+        indices[1,nz_idx:nz_idx+nhere] = list(col_ids) # might be a set
         nz_idx += nhere
-    # ec_transcript_mat = torch.sparse_coo_tensor(indices, np.ones(nnz))
-    return sp.coo_matrix((np.ones(nnz), indices))
+    
+    return sp.coo_matrix((np.ones(nnz), indices), shape = shape)
 
 
 def read_rad(
@@ -360,20 +361,21 @@ def read_rad(
     return new_ecs,cell_ec,list(t2idx.keys())
 
 def read_alevin_ec(fn):
+    """Read gene_eqclass.txt.gz from `alevin quant --dump-eqclasses`"""
 
     ecs = collections.OrderedDict()
 
     with smart_open(fn) as f: 
         for i,l in enumerate(f):
-            if i==0: 
+            if i==0: # first line gives number of features (normally genes but can be transcripts)
                 num_genes = int(l.decode().strip())
                 continue
-            if i==1: 
+            if i==1: # second line gives number of ECs
                 num_ec = int(l.decode().strip())
                 continue
             l = l.decode().strip().split()
             l = [int(g) for g in l]
-            ec_idx = l[-1]
+            ec_idx = l[-1] # last element of line is EC index
             gene_idx = l[:-1]
             ecs[ec_idx] = gene_idx
     return num_genes, num_ec, ecs
@@ -425,3 +427,39 @@ def make_cell_halfcell_matrix(BCs, polydT_hex_pairs, dtype = np.float32):
     # 32k cells lack their pair? Much worse (~140k) with first BC
     
     return np.array(new_BCs), cell_to_half_map
+
+
+def get_feature_weights(features, transcript_lengths_dic,  fragment_size = 300):
+    feature_lengths = np.array([transcript_lengths_dic[g] for g in features])
+    eff_lens = np.array([ 
+        ((g-fragment_size) if (g>fragment_size) else g) 
+        for g in feature_lengths ]) # discontinous :(
+    return feature_lengths, 1. / eff_lens
+
+
+def EM(counts, ec_transcript_mat, w, iterations = 30):
+    
+    n_transcripts = len(w)
+    alpha = np.full(n_transcripts,1.0/n_transcripts) # initialize to uniform
+    
+    alpha_w = ec_transcript_mat.copy()
+
+    for i in range(iterations):
+        alpha_w.data = (alpha * w)[ec_transcript_mat.col] # alpha_w[e,t] = ec_transcript_mat[e,t] alpha_t w_t
+        ec_sums = calcutta.sparse_sum(alpha_w,1) # ec_sums[e] = sum_{t \in e} alpha_t w_t
+        z = sp.diags(counts / ec_sums) @ alpha_w 
+        alpha_new = calcutta.sparse_sum(z,0)
+        alpha_new /= alpha_new.sum()
+        print(i,np.mean(np.abs(alpha - alpha_new)),end="\r")
+        alpha = alpha_new
+        
+    return alpha
+
+def get_neg_hessian(pseudobulk, ec_transcript_mat, w):
+    alpha_w = ec_transcript_mat.copy()
+    alpha_w.data = (alpha * w)[ec_transcript_mat.col]
+    ec_sums = calcutta.sparse_sum(alpha_w,1)
+    diag_w = sp.diags(w)
+    neg_hessian_factor = sp.diags( np.sqrt(pseudobulk) / ec_sums ) @ ec_transcript_mat @ sp.diags(w)
+    neg_hessian = neg_hessian_factor.T @ neg_hessian_factor
+    return neg_hessian_factor, neg_hessian
