@@ -1,4 +1,10 @@
 
+### tealeaf
+
+Other potentially interesting datasets: 
+- BrainSTEM: A multi-resolution fetal brain atlas to assess the fidelity of human midbrain cultures https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE281535
+- Loss of UBE3A impacts both neuronal and non-neuronal cells in human cerebral organoidshttps://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE253230
+
 ## Big picture: 
 
 Kallisto gave low read count on the OG SPLIT-seq data, compared to alevin which gives a decent number (1600?) UMIs per cell as long as you do de novo barcode correction (whitelist doesn't work for some reason?)
