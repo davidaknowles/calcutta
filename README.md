@@ -3,7 +3,7 @@
 
 Kallisto gave low read count on the OG SPLIT-seq data, compared to alevin which gives a decent number (1600?) UMIs per cell as long as you do de novo barcode correction (whitelist doesn't work for some reason?)
 
-The OG SPLIT-seq data gives weird cell types (Scott also saw this in PBMCs with Parse though?)
+~~The OG SPLIT-seq data gives weird cell types (Scott also saw this in PBMCs with Parse though?)~~ [I think this was a bug]
 
 Now looking at data from "microglialess" mice, in
 /gpfs/commons/groups/knowles_lab/data/sc/splitpool/microglia_less_mice
@@ -41,5 +41,5 @@ eda.ipynb: loads kallisto ECs and looks at various properties
 
 - figure out extracting sublib BC, 8% of data is doublets otherwise!  https://github.com/COMBINE-lab/salmon/issues/874
     - OK I think I have this: by running Alevin fry on each SRR ID individually and cross referencing with the preproc data, each sublib corresponds to two SRR IDs. 
-- figure out combining half cells without preproc meta: the mapping is actually simple, the first 48 RT BCs are for polydT, the next 48 for ranhex, and that ordering gives the pairing. Still leaves the question of whether is it good to combine half cells for differential splicing or we should just use ranhex. 
+- figure out combining half cells without preproc meta: the mapping is actually simple, the first 48 RT BCs are for polydT, the next 48 for ranhex, and that ordering gives the pairing. Still leaves the question of whether is it good to combine half cells for differential splicing (DS) or we should just use ranhex. 
 - Now we have reasonable looking cell-type labels from the preproc we can sum EC counts for cell types -> EM -> SUPPA-esque DS. 
