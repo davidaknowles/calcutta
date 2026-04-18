@@ -1,3 +1,5 @@
+"""Simulation helpers for Dirichlet LRTs and GTF-driven end-to-end studies."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -7,13 +9,15 @@ from typing import Optional, Sequence
 import numpy as np
 import scipy.sparse as sp
 
-from differential_usage import dirichlet_lrt
-from subisoform_pipeline import SubisoformPipelineResult, run_subisoform_pipeline
-from subisoforms import SubisoformModel, build_subisoform_model
+from .differential_usage import dirichlet_lrt
+from .subisoform_pipeline import SubisoformPipelineResult, run_subisoform_pipeline
+from .subisoforms import SubisoformModel, build_subisoform_model
 
 
 @dataclass
 class SimulationResult:
+    """Simulated count matrix with condition and sample annotations."""
+
     values: np.ndarray
     condition_labels: np.ndarray
     sample_ids: np.ndarray
@@ -25,6 +29,7 @@ def simulate_dirichlet_multinomial(
     total_count: int | Sequence[int] = 500,
     random_state: int = 0,
 ) -> SimulationResult:
+    """Sample counts directly from condition-specific Dirichlet-multinomial models."""
     if isinstance(n_samples_per_condition, int):
         n_samples_lookup = {condition: n_samples_per_condition for condition in alpha_by_condition}
     else:
@@ -61,6 +66,8 @@ def simulate_dirichlet_multinomial(
 
 @dataclass
 class LrtOperatingCharacteristics:
+    """Type I error and power summaries from repeated LRT simulations."""
+
     n_reps: int
     alpha_threshold: float
     null_p_values: np.ndarray
@@ -68,15 +75,19 @@ class LrtOperatingCharacteristics:
 
     @property
     def type1_error(self) -> float:
+        """Estimate the fraction of null replicates called significant."""
         return float(np.mean(self.null_p_values < self.alpha_threshold))
 
     @property
     def power(self) -> float:
+        """Estimate the fraction of alternative replicates called significant."""
         return float(np.mean(self.alt_p_values < self.alpha_threshold))
 
 
 @dataclass
 class GtfEventSimulationDesign:
+    """A real GTF-derived event packaged for end-to-end simulation."""
+
     gtf_filename: Path
     subisoform_model: SubisoformModel
     target_event_id: str
@@ -87,11 +98,14 @@ class GtfEventSimulationDesign:
 
     @property
     def transcript_ids(self) -> np.ndarray:
+        """Return transcript IDs participating in the simulated event."""
         return self.subisoform_model.transcript_ids
 
 
 @dataclass
 class EndToEndSimulationResult:
+    """Simulated EC counts and latent transcript/subisoform abundances."""
+
     design: GtfEventSimulationDesign
     cell_ec_matrix: sp.csr_matrix
     group_labels: np.ndarray
@@ -104,6 +118,7 @@ def _build_feature_compatibility(
     transcript_segment_orders: dict[str, tuple[int, ...]],
     transcript_ids: np.ndarray,
 ) -> tuple[sp.csr_matrix, np.ndarray]:
+    """Create transcript-observable features and their EC compatibility matrix."""
     ordered_ids = [str(tid) for tid in transcript_ids]
     transcript_features: dict[str, list[tuple[object, ...]]] = {}
     feature_members: dict[tuple[object, ...], set[str]] = {}
@@ -151,6 +166,7 @@ def _select_event(
     model: SubisoformModel,
     event_id: Optional[str] = None,
 ) -> str:
+    """Choose a multi-subisoform event from a model when none is specified."""
     event_groups = list(model.subisoform_table.groupby("event_id", sort=False))
     if not event_groups:
         raise ValueError("The selected transcripts did not produce any subisoform events.")
@@ -179,6 +195,7 @@ def build_gtf_event_simulation_design(
     transcript_ids: Sequence[object],
     event_id: Optional[str] = None,
 ) -> GtfEventSimulationDesign:
+    """Prepare a real GTF-derived event for end-to-end simulation."""
     gtf_path = Path(gtf_filename)
     model = build_subisoform_model(gtf_path, transcript_ids=transcript_ids)
     selected_event_id = _select_event(model, event_id=event_id)
@@ -216,6 +233,7 @@ def simulate_gtf_event_counts(
     mean_gene_count: float = 150.0,
     random_state: int = 0,
 ) -> EndToEndSimulationResult:
+    """Simulate subisoform usage, isoform counts, and EC counts for one event."""
     if isinstance(n_cells_per_condition, int):
         n_cells_lookup = {condition: n_cells_per_condition for condition in alpha_by_condition}
     else:
@@ -271,6 +289,7 @@ def run_end_to_end_simulation(
     random_state: int = 0,
     dirichlet_pseudocount: float = 1e-6,
 ) -> tuple[EndToEndSimulationResult, SubisoformPipelineResult]:
+    """Simulate EC counts and rerun the full grouped EM/subisoform pipeline."""
     simulation = simulate_gtf_event_counts(
         design=design,
         alpha_by_condition=alpha_by_condition,
@@ -294,6 +313,7 @@ def run_end_to_end_simulation(
 
 
 def _event_p_value(pipeline: SubisoformPipelineResult, event_id: str) -> float:
+    """Extract an event p-value from a pipeline result with a safe fallback."""
     if pipeline.differential_usage.empty:
         return 1.0
     matches = pipeline.differential_usage.loc[pipeline.differential_usage["event_id"] == event_id, "p_value"]
@@ -313,6 +333,7 @@ def estimate_lrt_operating_characteristics(
     pseudocount: float = 1e-6,
     random_state: int = 0,
 ) -> LrtOperatingCharacteristics:
+    """Estimate LRT type I error and power using direct count simulations."""
     rng = np.random.default_rng(random_state)
     null_p_values = np.zeros(n_reps, dtype=float)
     alt_p_values = np.zeros(n_reps, dtype=float)
@@ -365,6 +386,7 @@ def estimate_end_to_end_operating_characteristics(
     alpha_threshold: float = 0.05,
     random_state: int = 0,
 ) -> LrtOperatingCharacteristics:
+    """Estimate power and type I error for the full simulated analysis pipeline."""
     rng = np.random.default_rng(random_state)
     null_p_values = np.zeros(n_reps, dtype=float)
     alt_p_values = np.zeros(n_reps, dtype=float)

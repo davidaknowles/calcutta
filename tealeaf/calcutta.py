@@ -1,28 +1,36 @@
-import pandas as pd
+"""Legacy reusable utilities for alevin-fry EC and transcript processing."""
+
+from __future__ import annotations
+
 import collections
-import plotnine as p9
-import time
-from pathlib import Path
-import numpy as np
-import scipy.sparse as sp
-import matplotlib.pyplot as plt
-
 import gzip
-
 from collections import OrderedDict, namedtuple
+from pathlib import Path
+from typing import Iterable
 
-REVERSER=str.maketrans("AGCT","TCGA")
+import numpy as np
+import pandas as pd
+import scipy.sparse as sp
+
+REVERSER = str.maketrans("AGCT", "TCGA")
 
 def sparse_sum(x, dim):
+    """Return a sparse matrix sum as a squeezed NumPy array."""
     return np.squeeze(np.asarray(x.sum(dim)))
 
 def reverse_complement(seq):
+    """Return the reverse-complement of an uppercase DNA sequence."""
     return seq.translate(REVERSER)[::-1]
 
 def smart_open(filename, *argene_set, **kwargene_set):
-    return gzip.open(filename, *argene_set, **kwargene_set) if filename.suffix==".gz" else open(filename, *argene_set, **kwargene_set)
+    """Open plain-text or gzipped files with the same call signature."""
+    path = Path(filename)
+    if not argene_set and "mode" not in kwargene_set:
+        kwargene_set["mode"] = "rt"
+    return gzip.open(path, *argene_set, **kwargene_set) if path.suffix == ".gz" else open(path, *argene_set, **kwargene_set)
 
 def get_fasta(fasta_file, first_field = False):
+    """Read a FASTA file into an ordered header-to-sequence mapping."""
     with smart_open(fasta_file) as f:
         F = f.read().split(">")
     dic = OrderedDict()
@@ -41,6 +49,7 @@ def get_fasta(fasta_file, first_field = False):
 
 
 def get_transcript_gene_map(transcript_fn, t2g_fn):
+    """Load transcript IDs and map each index to its gene identifier."""
     transcripts = pd.read_csv(transcript_fn, sep = "\t", names = ["transcripts"]).transcripts
 
     t2g = pd.read_csv(t2g_fn, sep = "\t", names = ("transcript","gene","common"))
@@ -52,10 +61,12 @@ def get_transcript_gene_map(transcript_fn, t2g_fn):
     return transcripts, t2g_dic
 
 def get_transcript_lengths(fasta_file):
+    """Return transcript lengths derived from a FASTA file."""
     cdna = get_fasta(fasta_file, first_field = True)
     return OrderedDict([(transcript,len(seq)) for transcript,seq in cdna.items()])
 
 def read_ec(fn):
+    """Read a simple EC-to-transcript map from a text file."""
     ec_map = {} # mapping from equivalence class ID to sets of transcript IDs
     with open(fn) as f:
         for line in f:
@@ -65,6 +76,7 @@ def read_ec(fn):
     return ec_map
 
 def transcript_to_ec(ec_map):
+    """Invert an EC-to-transcript dictionary into transcript-to-EC lists."""
     ec_reverse = {}
     for ec,transcript_list in ec_map.items(): 
         for transcript in transcript_list: 
@@ -74,6 +86,7 @@ def transcript_to_ec(ec_map):
     return ec_reverse
 
 def cell_ec_to_sparse(cell_ec):
+    """Convert barcode-keyed EC count dictionaries into sparse COO ingredients."""
 
     my_ecs = set().union( *[g.keys() for bc,g in cell_ec.items()] )
     
@@ -100,7 +113,7 @@ def cell_ec_to_sparse(cell_ec):
     return sorted_ecs, ec_id_map, sorted_BCs, indices, umi_counts
 
 def to_coo(x, shape = None):
-    """x is a list, where each item corresponds to a different row. The item for a row gives the column IDs for the non-zero entries. """
+    """Convert row-wise column ID lists into a sparse COO matrix."""
     nnz = sum([len(g) for g in x])
 
     indices = np.zeros((2,nnz), dtype=int) # cell then EC idx
@@ -116,7 +129,7 @@ def to_coo(x, shape = None):
 
 
 def read_alevin_ec(fn):
-    """Read gene_eqclass.txt.gz from `alevin quant --dump-eqclasses`"""
+    """Read `gene_eqclass.txt.gz` from `alevin quant --dump-eqclasses`."""
 
     ecs = collections.OrderedDict()
 
@@ -137,6 +150,7 @@ def read_alevin_ec(fn):
 
 
 def make_cell_halfcell_matrix(BCs, polydT_hex_pairs, dtype = np.float32):
+    """Map Parse barcodes to merged cell/half-cell assignments."""
     cb_to_idx = {cb:i for i,cb in enumerate(BCs)}
     polydT_to_hex = { p:h for p,h in zip(polydT_hex_pairs.polydT, polydT_hex_pairs.hex) }
     nnz = len(BCs) # number of half cells. every halfcell should be included exactly once. 
@@ -185,6 +199,7 @@ def make_cell_halfcell_matrix(BCs, polydT_hex_pairs, dtype = np.float32):
 
 
 def get_feature_weights(features, transcript_lengths_dic,  fragment_size = 300):
+    """Convert transcript lengths into effective-length EM weights."""
     feature_lengths = np.array([transcript_lengths_dic[g] for g in features])
     eff_lens = np.array([ 
         ((g-fragment_size) if (g>fragment_size) else g) 
@@ -193,6 +208,7 @@ def get_feature_weights(features, transcript_lengths_dic,  fragment_size = 300):
 
 
 def EM(counts, ec_transcript_mat, w, iterations = 30):
+    """Run a simple transcript EM algorithm on one EC count vector."""
     
     n_transcripts = len(w)
     alpha = np.full(n_transcripts,1.0/n_transcripts) # initialize to uniform
@@ -201,20 +217,22 @@ def EM(counts, ec_transcript_mat, w, iterations = 30):
 
     for i in range(iterations):
         alpha_w.data = (alpha * w)[ec_transcript_mat.col] # alpha_w[e,t] = ec_transcript_mat[e,t] alpha_t w_t
-        ec_sums = calcutta.sparse_sum(alpha_w,1) # ec_sums[e] = sum_{t \in e} alpha_t w_t
+        ec_sums = sparse_sum(alpha_w,1) # ec_sums[e] = sum_{t \in e} alpha_t w_t
         z = sp.diags(counts / ec_sums) @ alpha_w 
-        alpha_new = calcutta.sparse_sum(z,0)
+        alpha_new = sparse_sum(z,0)
         alpha_new /= alpha_new.sum()
         print(i,np.mean(np.abs(alpha - alpha_new)),end="\r")
         alpha = alpha_new
         
     return alpha
 
-def get_neg_hessian(pseudobulk, ec_transcript_mat, w):
+def get_neg_hessian(pseudobulk, ec_transcript_mat, w, alpha=None):
+    """Compute the negative Hessian of the EM objective at a transcript mixture."""
+    if alpha is None:
+        alpha = EM(pseudobulk, ec_transcript_mat, w)
     alpha_w = ec_transcript_mat.copy()
     alpha_w.data = (alpha * w)[ec_transcript_mat.col]
-    ec_sums = calcutta.sparse_sum(alpha_w,1)
-    diag_w = sp.diags(w)
+    ec_sums = sparse_sum(alpha_w,1)
     neg_hessian_factor = sp.diags( np.sqrt(pseudobulk) / ec_sums ) @ ec_transcript_mat @ sp.diags(w)
     neg_hessian = neg_hessian_factor.T @ neg_hessian_factor
     return neg_hessian_factor, neg_hessian

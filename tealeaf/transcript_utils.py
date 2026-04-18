@@ -1,3 +1,5 @@
+"""Transcript-length and alias-resolution helpers for transcript EM."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -6,10 +8,11 @@ from typing import Mapping, Sequence
 import numpy as np
 import pandas as pd
 
-import calcutta
+from . import calcutta
 
 
 def load_alias_map(alias_path: str | Path) -> dict[str, str]:
+    """Load transcript identifier aliases from a two-column TSV file."""
     alias_df = pd.read_csv(alias_path, sep="\t", names=["source", "target"])
     return dict(zip(alias_df["source"].astype(str), alias_df["target"].astype(str)))
 
@@ -19,6 +22,7 @@ def resolve_transcript_lengths(
     transcript_lengths: Mapping[str, int],
     alias_map: Mapping[str, str] | None = None,
 ) -> tuple[np.ndarray, np.ndarray]:
+    """Resolve transcript lengths, optionally falling back through aliases."""
     transcript_ids = np.asarray(transcript_ids, dtype=object)
     lengths = np.zeros(len(transcript_ids), dtype=float)
     missing: list[object] = []
@@ -40,6 +44,7 @@ def get_effective_length_weights(
     alias_path: str | Path | None = None,
     fragment_size: int = 300,
 ) -> tuple[np.ndarray, np.ndarray]:
+    """Convert transcript lengths into effective-length EM weights."""
     transcript_lengths = calcutta.get_transcript_lengths(Path(fasta_path))
     alias_map = load_alias_map(alias_path) if alias_path is not None else None
     feature_lengths, missing = resolve_transcript_lengths(

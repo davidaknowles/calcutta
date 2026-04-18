@@ -1,3 +1,5 @@
+"""Build GTF-derived subisoform models from transcript exon structures."""
+
 from __future__ import annotations
 
 from collections import defaultdict
@@ -12,10 +14,12 @@ import scipy.sparse as sp
 
 
 def _open_text(path: Path):
+    """Open plain-text or gzipped files for text iteration."""
     return gzip.open(path, "rt") if path.suffix == ".gz" else open(path, "r")
 
 
 def _parse_gtf_attributes(attribute_field: str) -> dict[str, str]:
+    """Parse a GTF attributes column into a key-value dictionary."""
     attributes: dict[str, str] = {}
     for item in attribute_field.strip().split(";"):
         item = item.strip()
@@ -30,6 +34,7 @@ def load_transcript_exons(
     gtf_filename: str | Path,
     feature_types: Iterable[str] = ("exon", "five_prime_utr", "three_prime_utr"),
 ) -> pd.DataFrame:
+    """Load exon-like transcript features from a GTF into a tidy table."""
     feature_types = set(feature_types)
     records: list[dict[str, object]] = []
     with _open_text(Path(gtf_filename)) as handle:
@@ -62,6 +67,7 @@ def load_transcript_exons(
 
 
 def _merge_intervals(intervals: list[tuple[int, int]]) -> list[tuple[int, int]]:
+    """Merge overlapping or directly adjacent genomic intervals."""
     merged: list[list[int]] = []
     for start, end in sorted(intervals):
         if not merged or start > merged[-1][1] + 1:
@@ -72,6 +78,7 @@ def _merge_intervals(intervals: list[tuple[int, int]]) -> list[tuple[int, int]]:
 
 
 def _build_atomic_segments(gene_df: pd.DataFrame) -> pd.DataFrame:
+    """Split a gene's exonic span into disjoint atomic segments."""
     breakpoints = sorted(set(gene_df["start"]).union(gene_df["end"] + 1))
     segments: list[dict[str, object]] = []
     chrom = gene_df["chrom"].iloc[0]
@@ -99,6 +106,7 @@ def _build_atomic_segments(gene_df: pd.DataFrame) -> pd.DataFrame:
 
 
 def _segments_in_interval(segments: pd.DataFrame, start: int, end: int, strand: str) -> list[int]:
+    """Return ordered atomic segment IDs fully contained in an exon interval."""
     segment_orders = segments.loc[(segments["start"] >= start) & (segments["end"] <= end), "segment_order"].tolist()
     if strand == "-":
         segment_orders.reverse()
@@ -107,6 +115,8 @@ def _segments_in_interval(segments: pd.DataFrame, start: int, end: int, strand: 
 
 @dataclass
 class SubisoformModel:
+    """Sparse mapping from transcript isoforms to local subisoform paths."""
+
     transcript_ids: np.ndarray
     isoform_to_subisoform: sp.csr_matrix
     segment_table: pd.DataFrame
@@ -116,9 +126,11 @@ class SubisoformModel:
 
     @property
     def subisoform_ids(self) -> np.ndarray:
+        """Return the ordered subisoform identifiers in this model."""
         return self.subisoform_table["subisoform_id"].to_numpy()
 
     def collapse(self, values: np.ndarray, transcript_ids: Optional[Sequence[object]] = None) -> np.ndarray:
+        """Collapse transcript-level values into subisoform-level values."""
         matrix = np.asarray(values, dtype=float)
         if matrix.ndim == 1:
             matrix = matrix[None, :]
@@ -139,6 +151,7 @@ def build_subisoform_model(
     gtf_filename: str | Path,
     transcript_ids: Optional[Sequence[object]] = None,
 ) -> SubisoformModel:
+    """Construct an anchor-based subisoform model from a GTF transcript set."""
     exons = load_transcript_exons(gtf_filename)
     if exons.empty:
         raise ValueError("No transcript exons were loaded from the GTF.")

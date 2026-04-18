@@ -1,3 +1,5 @@
+"""Load and harmonize all-sublibrary microglialess Parse inputs."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -9,7 +11,7 @@ import pandas as pd
 import scipy.io
 import scipy.sparse as sp
 
-import calcutta
+from . import calcutta
 
 
 DEFAULT_DATA_DIR = Path("/gpfs/commons/groups/knowles_lab/data/sc/splitpool/microglia_less_mice")
@@ -19,6 +21,8 @@ DEFAULT_INDEX_DIR = Path("/gpfs/commons/groups/knowles_lab/index/salmon/mus_spli
 
 @dataclass
 class MicroglialessInputs:
+    """Selected all-sublibrary inputs prepared for downstream EM analysis."""
+
     cell_ec_matrix: sp.csr_matrix
     ec_transcript_mat: sp.csr_matrix
     transcript_ids: np.ndarray
@@ -28,6 +32,7 @@ class MicroglialessInputs:
 
 
 def _load_sparse_matrix(mtx_path: Path, cache_path: Optional[Path] = None) -> sp.csr_matrix:
+    """Load a Matrix Market file, caching it as NPZ for reuse."""
     if cache_path is None:
         cache_path = mtx_path.with_suffix(".npz")
     if cache_path.exists():
@@ -38,6 +43,7 @@ def _load_sparse_matrix(mtx_path: Path, cache_path: Optional[Path] = None) -> sp
 
 
 def load_preprocessed_cell_metadata(data_dir: Path = DEFAULT_DATA_DIR) -> pd.DataFrame:
+    """Load the published microglialess cell metadata and derived barcodes."""
     barcode_ids = [line.strip() for line in open(data_dir / "GSM5693472_barcodes.tsv", "r")]
     barcode_prefix = [value.split("_")[0] for value in barcode_ids]
     metadata = pd.read_csv(data_dir / "GSM5693472_cell_metadata.txt.gz", sep="\t")
@@ -48,6 +54,7 @@ def load_preprocessed_cell_metadata(data_dir: Path = DEFAULT_DATA_DIR) -> pd.Dat
 
 
 def load_transcript_gene_map(index_dir: Path = DEFAULT_INDEX_DIR) -> pd.DataFrame:
+    """Load the spliceu transcript-to-gene map used by the index."""
     mapping = pd.read_csv(index_dir / "spliceu_t2g.tsv", sep="\t", names=["transcript_id", "gene_id"])
     mapping["gene_stable_id"] = mapping["gene_id"].str.replace(r"\.\d+$", "", regex=True)
     return mapping
@@ -58,6 +65,7 @@ def select_transcripts_for_genes(
     gene_ids: Sequence[object],
     index_dir: Path = DEFAULT_INDEX_DIR,
 ) -> np.ndarray:
+    """Filter transcript IDs down to those assigned to selected genes."""
     transcript_ids = np.asarray(transcript_ids, dtype=object)
     gene_ids = np.asarray(gene_ids, dtype=object)
     mapping = load_transcript_gene_map(index_dir=index_dir)
@@ -66,6 +74,7 @@ def select_transcripts_for_genes(
 
 
 def _prepare_parse_barcode_tables(parse_meta_dir: Path = DEFAULT_PARSE_META_DIR) -> tuple[pd.DataFrame, dict[str, int]]:
+    """Load Parse barcode reference tables used to decode featureDump barcodes."""
     ligation = pd.read_csv(parse_meta_dir / "Parse_ligation_barcodes.txt", sep="\t", header=None)[0].astype(str).tolist()
     rt = pd.read_csv(parse_meta_dir / "Parse_RT_barcodes.txt", sep="\t", header=None)[0].astype(str).tolist()
     polydt_hex_pairs = pd.DataFrame(
@@ -82,6 +91,7 @@ def match_feature_dump_to_preprocessed(
     polydt_hex_pairs: pd.DataFrame,
     ligation_lookup: dict[str, int],
 ) -> pd.DataFrame:
+    """Match a sublibrary featureDump table back to preprocessed cell metadata."""
     cells = feature_dump.copy()
     cells["local_cell_index"] = np.arange(len(cells))
     cells["sublibrary"] = sublibrary
@@ -104,6 +114,7 @@ def _load_eqclass_subset(
     selected_transcript_ids: np.ndarray,
     selected_row_indices: np.ndarray,
 ) -> tuple[sp.csr_matrix, list[tuple[int, ...]]]:
+    """Load only the EC columns touching a selected transcript subset."""
     feature_ids = np.asarray([line.strip() for line in open(fry_dir / "alevin" / "quants_mat_cols.txt", "r")], dtype=object)
     selected_lookup = {tid: idx for idx, tid in enumerate(selected_transcript_ids)}
     feature_to_selected = np.full(len(feature_ids), -1, dtype=int)
@@ -139,6 +150,7 @@ def load_all_sublib_inputs(
     quant_name: str = "quant_spliceu_t2t",
     sublibraries: Optional[Sequence[str]] = None,
 ) -> MicroglialessInputs:
+    """Build a combined selected-gene EC representation across all sublibraries."""
     polydt_hex_pairs, ligation_lookup = _prepare_parse_barcode_tables(parse_meta_dir=parse_meta_dir)
     preprocessed_metadata = load_preprocessed_cell_metadata(data_dir=data_dir)
 

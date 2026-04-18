@@ -1,8 +1,11 @@
+"""Load alevin-fry quantifications into AnnData objects."""
+
 import scanpy
 
 def load_fry(frydir, which_counts={'X' : ['S','A']}, verbose=False):
     """
-    
+    Load an alevin-fry quantification directory into an AnnData object.
+
     Parameters:
         frydir - The directory containing the alevin-fry quantification (i.e. the the quant.json file & alevin subdirectory).
         verbose - True if messages (including error messages) should be printed out, False if function should be quiet.

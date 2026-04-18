@@ -1,3 +1,5 @@
+"""High-level grouped EM, subisoform collapse, and testing workflow."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -8,19 +10,22 @@ import numpy as np
 import pandas as pd
 import scipy.sparse as sp
 
-from differential_usage import test_differential_subisoform_usage
-from grouped_em import GroupedEmResult, run_grouped_em
-from subisoforms import SubisoformModel, build_subisoform_model
+from .differential_usage import test_differential_subisoform_usage
+from .grouped_em import GroupedEmResult, run_grouped_em
+from .subisoforms import SubisoformModel, build_subisoform_model
 
 
 @dataclass
 class SubisoformPipelineResult:
+    """Outputs from the full grouped EM to differential-usage pipeline."""
+
     grouped_em: GroupedEmResult
     subisoform_model: SubisoformModel
     subisoform_tpm: np.ndarray
     differential_usage: pd.DataFrame
 
     def subisoform_tpm_frame(self) -> pd.DataFrame:
+        """Return subisoform TPMs in a labeled sample-by-subisoform table."""
         return pd.DataFrame(
             self.subisoform_tpm,
             index=self.grouped_em.sample_ids,
@@ -46,6 +51,7 @@ def run_subisoform_pipeline(
     min_subisoforms: int = 2,
     min_samples_per_condition: int = 2,
 ) -> SubisoformPipelineResult:
+    """Run grouped EM, collapse transcript TPMs, and test differential usage."""
     grouped = run_grouped_em(
         cell_ec_matrix=cell_ec_matrix,
         ec_transcript_mat=ec_transcript_mat,

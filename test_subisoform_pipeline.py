@@ -7,9 +7,9 @@ from pathlib import Path
 import numpy as np
 import scipy.sparse as sp
 
-from subisoform_pipeline import run_subisoform_pipeline
-from subisoform_simulation import build_gtf_event_simulation_design, run_end_to_end_simulation
-from subisoforms import build_subisoform_model
+from tealeaf.subisoform_pipeline import run_subisoform_pipeline
+from tealeaf.subisoform_simulation import build_gtf_event_simulation_design, run_end_to_end_simulation
+from tealeaf.subisoforms import build_subisoform_model
 
 
 SYNTHETIC_GTF = """\

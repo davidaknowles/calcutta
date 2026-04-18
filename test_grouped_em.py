@@ -5,8 +5,8 @@ import unittest
 import numpy as np
 import scipy.sparse as sp
 
-from grouped_em import aggregate_rows, make_metacell_assignments, run_grouped_em
-from transcript_utils import resolve_transcript_lengths
+from tealeaf.grouped_em import aggregate_rows, make_metacell_assignments, run_grouped_em
+from tealeaf.transcript_utils import resolve_transcript_lengths
 
 
 class GroupedEmTest(unittest.TestCase):

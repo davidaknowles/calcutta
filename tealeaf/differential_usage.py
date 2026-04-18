@@ -1,3 +1,5 @@
+"""Dirichlet-model fitting and differential subisoform usage testing."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -11,6 +13,7 @@ from scipy.stats import chi2
 
 
 def _as_2d_array(values: np.ndarray | Sequence[Sequence[float]]) -> np.ndarray:
+    """Coerce an input matrix to a two-dimensional float array."""
     arr = np.asarray(values, dtype=float)
     if arr.ndim != 2:
         raise ValueError("values must be two-dimensional.")
@@ -18,6 +21,7 @@ def _as_2d_array(values: np.ndarray | Sequence[Sequence[float]]) -> np.ndarray:
 
 
 def _smooth_compositions(values: np.ndarray, pseudocount: float) -> np.ndarray:
+    """Convert non-negative counts into smoothed per-sample compositions."""
     if pseudocount <= 0:
         raise ValueError("pseudocount must be positive.")
     values = np.asarray(values, dtype=float)
@@ -30,6 +34,7 @@ def _smooth_compositions(values: np.ndarray, pseudocount: float) -> np.ndarray:
 
 
 def fit_dirichlet(compositions: np.ndarray, maxiter: int = 500) -> tuple[np.ndarray, float, bool]:
+    """Fit Dirichlet concentration parameters to observed compositions."""
     compositions = _as_2d_array(compositions)
     log_x = np.log(compositions)
     log_x_sum = log_x.sum(axis=0)
@@ -62,6 +67,7 @@ def fit_dirichlet(compositions: np.ndarray, maxiter: int = 500) -> tuple[np.ndar
 
 
 def benjamini_hochberg(p_values: Sequence[float]) -> np.ndarray:
+    """Adjust p-values with the Benjamini-Hochberg FDR procedure."""
     p_values = np.asarray(p_values, dtype=float)
     order = np.argsort(p_values)
     ranked = p_values[order]
@@ -75,6 +81,8 @@ def benjamini_hochberg(p_values: Sequence[float]) -> np.ndarray:
 
 @dataclass
 class DirichletLrtResult:
+    """Summary statistics for a Dirichlet likelihood-ratio test."""
+
     alpha_null: np.ndarray
     alpha_by_condition: dict[object, np.ndarray]
     log_likelihood_null: float
@@ -90,6 +98,7 @@ def dirichlet_lrt(
     condition_labels: Sequence[object],
     pseudocount: float = 1e-6,
 ) -> DirichletLrtResult:
+    """Compare shared and condition-specific Dirichlet composition models."""
     values = _as_2d_array(values)
     condition_labels = np.asarray(condition_labels, dtype=object)
     if values.shape[0] != len(condition_labels):
@@ -135,6 +144,7 @@ def test_differential_subisoform_usage(
     min_subisoforms: int = 2,
     min_samples_per_condition: int = 2,
 ) -> pd.DataFrame:
+    """Run event-wise Dirichlet LRTs across groups of subisoforms."""
     subisoform_values = _as_2d_array(subisoform_values)
     condition_labels = np.asarray(condition_labels, dtype=object)
     if subisoform_values.shape[0] != len(condition_labels):

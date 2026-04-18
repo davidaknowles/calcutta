@@ -1,3 +1,5 @@
+"""Grouped and metacell-aware EM utilities for transcript abundance estimation."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -10,10 +12,12 @@ import scipy.sparse as sp
 
 
 def sparse_sum(matrix: sp.spmatrix, axis: int) -> np.ndarray:
+    """Return a sparse matrix sum as a squeezed NumPy array."""
     return np.squeeze(np.asarray(matrix.sum(axis)))
 
 
 def _as_label_array(labels: Sequence[object], expected_length: int, name: str) -> np.ndarray:
+    """Validate a sequence of labels and coerce it to a one-dimensional array."""
     arr = np.asarray(labels, dtype=object)
     if arr.ndim != 1:
         raise ValueError(f"{name} must be one-dimensional.")
@@ -24,6 +28,8 @@ def _as_label_array(labels: Sequence[object], expected_length: int, name: str) -
 
 @dataclass
 class EmRunResult:
+    """Outputs from a single EM run on one aggregated count profile."""
+
     fractions: np.ndarray
     tpm: np.ndarray
     expected_counts: np.ndarray
@@ -34,6 +40,8 @@ class EmRunResult:
 
 @dataclass
 class GroupedEmResult:
+    """Grouped transcript-abundance estimates and per-sample diagnostics."""
+
     sample_ids: np.ndarray
     transcript_ids: np.ndarray
     fractions: np.ndarray
@@ -47,13 +55,16 @@ class GroupedEmResult:
     deltas: np.ndarray
 
     def tpm_frame(self) -> pd.DataFrame:
+        """Return TPM estimates in a labeled data frame."""
         return pd.DataFrame(self.tpm, index=self.sample_ids, columns=self.transcript_ids)
 
     def expected_count_frame(self) -> pd.DataFrame:
+        """Return expected transcript counts in a labeled data frame."""
         return pd.DataFrame(self.expected_counts, index=self.sample_ids, columns=self.transcript_ids)
 
 
 def aggregate_rows(matrix: sp.spmatrix, row_labels: Sequence[object]) -> tuple[np.ndarray, sp.csr_matrix, np.ndarray]:
+    """Aggregate matrix rows by label while preserving first-seen label order."""
     matrix = sp.csr_matrix(matrix)
     row_labels = _as_label_array(row_labels, matrix.shape[0], "row_labels")
     codes, uniques = pd.factorize(row_labels, sort=False)
@@ -71,6 +82,7 @@ def make_metacell_assignments(
     target_size: int = 200,
     random_state: int = 0,
 ) -> pd.DataFrame:
+    """Partition cells into metacells within each condition and optional batch."""
     if target_size <= 0:
         raise ValueError("target_size must be positive.")
 
@@ -133,6 +145,7 @@ def build_grouped_ec_matrix(
     metacell_size: Optional[int] = None,
     random_state: int = 0,
 ) -> tuple[np.ndarray, sp.csr_matrix, pd.DataFrame]:
+    """Aggregate a cell-by-EC matrix into grouped samples or metacells."""
     cell_ec_matrix = sp.csr_matrix(cell_ec_matrix)
     group_labels = _as_label_array(group_labels, cell_ec_matrix.shape[0], "group_labels")
 
@@ -165,6 +178,7 @@ def run_em(
     tol: float = 1e-8,
     init: Optional[Sequence[float]] = None,
 ) -> EmRunResult:
+    """Estimate transcript fractions from EC counts with a weighted EM update."""
     counts = np.asarray(counts, dtype=float).ravel()
     weights = np.asarray(transcript_weights, dtype=float).ravel()
     compat = sp.coo_matrix(ec_transcript_mat)
@@ -270,6 +284,7 @@ def run_grouped_em(
     iterations: int = 100,
     tol: float = 1e-8,
 ) -> GroupedEmResult:
+    """Run transcript-level EM on each grouped sample in an EC matrix."""
     sample_ids, grouped_ec, sample_metadata = build_grouped_ec_matrix(
         cell_ec_matrix=cell_ec_matrix,
         group_labels=group_labels,

@@ -5,8 +5,8 @@ import unittest
 import numpy as np
 import pandas as pd
 
-from differential_usage import benjamini_hochberg, dirichlet_lrt, test_differential_subisoform_usage
-from subisoform_simulation import estimate_lrt_operating_characteristics, simulate_dirichlet_multinomial
+from tealeaf.differential_usage import benjamini_hochberg, dirichlet_lrt, test_differential_subisoform_usage
+from tealeaf.subisoform_simulation import estimate_lrt_operating_characteristics, simulate_dirichlet_multinomial
 
 
 class DifferentialUsageTest(unittest.TestCase):
