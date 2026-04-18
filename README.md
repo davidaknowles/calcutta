@@ -49,3 +49,33 @@ eda.ipynb: loads kallisto ECs and looks at various properties
     - OK I think I have this: by running Alevin fry on each SRR ID individually and cross referencing with the preproc data, each sublib corresponds to two SRR IDs. 
 - figure out combining half cells without preproc meta: the mapping is actually simple, the first 48 RT BCs are for polydT, the next 48 for ranhex, and that ordering gives the pairing. Still leaves the question of whether is it good to combine half cells for differential splicing (DS) or we should just use ranhex. 
 - Now we have reasonable looking cell-type labels from the preproc we can sum EC counts for cell types -> EM -> SUPPA-esque DS. 
+
+## Programmatic subisoform workflow
+
+- `grouped_em.py` aggregates cells into cell-type pseudobulks or metacells and runs transcript-level EM against an EC-by-transcript compatibility matrix.
+- `subisoforms.py` builds a splice-graph-style representation from the GTF by splitting exons into disjoint sub-exonic segments, marking anchor segments, and enumerating transcript subpaths between anchors as "subisoforms". It also materializes the sparse isoform-by-subisoform matrix used to collapse transcript TPMs.
+- `differential_usage.py` fits Dirichlet models to subisoform compositions and performs likelihood-ratio tests across cell-types.
+- `subisoform_pipeline.py` wires the full workflow together: grouped EM -> GTF-derived subisoform collapse -> Dirichlet differential usage.
+- `subisoform_simulation.py` includes both a lightweight Dirichlet-multinomial simulator for the LRT itself and a GTF-driven end-to-end simulator that starts from real transcript models, samples subisoform usage, projects to isoform expression, generates EC counts, and reruns the full pipeline.
+- `microglialess.py` provides a real-data loader for the microglialess Parse sublibraries, including barcode matching back to the preprocessed cell-type metadata and cross-sublib EC remapping for selected genes.
+- `transcript_utils.py` resolves transcript lengths / aliases against the spliceu reference so EM weights keep working after transcript deduplication.
+
+The intended inputs are:
+
+1. cells x EC counts from `alevin-fry --dump-eqclasses`
+2. the matching EC x transcript compatibility matrix
+3. transcript IDs / effective-length weights in the same transcript order
+4. a GTF describing the mature transcript models
+
+Typical usage is:
+
+1. aggregate cells by cell type or build metacells within each cell type
+2. run transcript EM for each aggregated sample
+3. collapse transcript TPMs onto subisoforms with the sparse isoform-by-subisoform matrix
+4. test each anchor-pair event group for differential subisoform usage with the Dirichlet model
+
+## Tests and notebooks
+
+- Unit tests covering grouped EM, subisoform construction, the Dirichlet wrapper, and simulation-based operating characteristics live in `test_grouped_em.py`, `test_differential_usage.py`, and `test_subisoform_pipeline.py`.
+- `subisoform_simulation.ipynb` now uses a real GTF-derived two-isoform event to simulate subisoform usage -> isoform expression -> EC counts -> full-pipeline recovery; larger end-to-end power / type I studies are available programmatically from `subisoform_simulation.py`.
+- `subisoform_microglialess.ipynb` runs the full grouped EM -> subisoform collapse -> differential-usage workflow on all microglialess sublibraries for a small panel of real genes.
